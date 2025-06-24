@@ -1,6 +1,3 @@
-以下是重新整理后的规范Markdown格式，优化了目录结构和可读性：
-
-```markdown
 # Highway-Parking-Detection
 
 ## 项目简介
