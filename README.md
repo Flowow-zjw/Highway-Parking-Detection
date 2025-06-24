@@ -51,7 +51,7 @@
 
 ### 1. 环境配置
 ```bash
-git clone https://github.com/<your-username>/Highway-Parking-Detection.git
+git clone https://github.com/Flowow-zjw/Highway-Parking-Detection
 cd Highway-Parking-Detection
 
 # 创建虚拟环境（任选一种）
