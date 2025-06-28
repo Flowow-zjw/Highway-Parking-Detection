@@ -1,0 +1,2 @@
+D:/挑战杯程序/Highway-Parking-Detection/checkpoint/latest.pth filter=lfs diff=lfs merge=lfs -text
+checkpoint/latest.pth filter=lfs diff=lfs merge=lfs -text
