@@ -2,6 +2,5 @@ from mmdet.datasets import DOTADataset
 
 class CODroneDataset(DOTADataset):
     CLASSES = (
-        'car', 'truck', 'bus', 'van', 'excavator', 'barrow',
-        'tricycle', 'awning-tricycle', 'forklift', 'other', 'motor', 'person', 'bicycle'
+        'car','people','motor','truck','traffic-sign','boat','traffic-light','ship','bicycle','tricycle','tricycle','bridge','bus','ignored'
     )

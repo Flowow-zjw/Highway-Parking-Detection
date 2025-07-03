@@ -22,7 +22,7 @@ def inference_video(config_file, checkpoint_file, input_video_path, output_dir, 
     os.makedirs(output_dir, exist_ok=True)
 
     video_reader = mmcv.VideoReader(input_video_path)
-    if not video_reader.isOpened():
+    if not video_reader.opened:
         raise RuntimeError(f"无法打开视频文件: {input_video_path}")
 
     base_name = os.path.basename(input_video_path)
@@ -42,7 +42,7 @@ def inference_video(config_file, checkpoint_file, input_video_path, output_dir, 
 if __name__ == '__main__':
     cfg_path = get_absolute_path('configs', 'detection', 'rtmdet_custom.py')
     ckpt_path = get_absolute_path('checkpoints', 'rtmdet_tiny.pth')
-    input_video = get_absolute_path('data', 'raw_videos', 'example_video.mp4')
+    input_video = get_absolute_path('data', 'raw_videos', '屏幕录制 2025-05-31 170124.mp4')
     output_folder = get_absolute_path('output')
 
     inference_video(cfg_path, ckpt_path, input_video, output_folder, device='cuda:0')
