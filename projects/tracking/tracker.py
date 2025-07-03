@@ -29,6 +29,38 @@ def get_absolute_path(*path_parts):
     project_root = os.path.dirname(os.path.dirname(script_dir))
     return os.path.join(project_root, *path_parts)
 
+def draw_rotated_bbox(image, bbox, color, thickness=2):
+    """新增：绘制旋转边界框的辅助函数"""
+    if len(bbox) < 5:
+        # 如果不是旋转框，绘制普通矩形
+        x1, y1, x2, y2 = bbox[:4]
+        cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), color, thickness)
+        return (int(x1), int(y1))
+    
+    # 旋转框: [cx, cy, w, h, angle]
+    center = (int(bbox[0]), int(bbox[1]))
+    size = (int(bbox[2]), int(bbox[3]))
+    angle = bbox[4] * 180 / math.pi
+    
+    # 获取旋转矩形的四个角点
+    rect = (center, size, angle)
+    box_points = cv2.boxPoints(rect)
+    box_points = np.int0(box_points)
+    
+    # 绘制旋转矩形
+    cv2.drawContours(image, [box_points], 0, color, thickness)
+    
+    # 绘制中心点
+    cv2.circle(image, center, 3, color, -1)
+    
+    # 绘制方向线（表示车辆朝向）
+    direction_length = min(size) // 4
+    end_x = int(center[0] + direction_length * math.cos(bbox[4]))
+    end_y = int(center[1] + direction_length * math.sin(bbox[4]))
+    cv2.line(image, center, (end_x, end_y), color, thickness)
+    
+    return center
+
 class MultiObjectTracker:
     """改进的多目标跟踪器类 - 使用SimpleBYTETracker"""
     
@@ -58,10 +90,10 @@ class MultiObjectTracker:
                 # SimpleBYTETracker参数 - 针对车辆跟踪优化
                 tracker_params = {
                     'frame_rate': 30,
-                    'track_thresh': 0.6,        # 高置信度阈值
-                    'track_buffer': 30,         # 跟踪缓冲帧数
-                    'match_thresh': 0.8,        # 匹配阈值
-                    'min_box_area': 100,        # 最小框面积
+                    'track_thresh': 0.3,        # 高置信度阈值
+                    'track_buffer': 60,         # 跟踪缓冲帧数
+                    'match_thresh': 0.6,        # 匹配阈值
+                    'min_box_area': 20,        # 最小框面积
                     'mot20': False
                 }
             else:
@@ -122,7 +154,7 @@ class MultiObjectTracker:
         return tracks, result
     
     def visualize_tracks(self, frame, tracks, result=None):
-        """可视化跟踪结果"""
+        """修改：可视化跟踪结果 - 支持旋转框显示"""
         vis_frame = frame.copy()
         
         class_colors = {
@@ -135,25 +167,26 @@ class MultiObjectTracker:
         }
         
         for track in tracks:
-            bbox = track.bbox if hasattr(track, 'bbox') else track.tlbr
             color = class_colors.get(track.class_name, (128, 128, 128))
             
-            # 绘制框
-            bbox_int = bbox.astype(np.int32)
-            cv2.rectangle(vis_frame, (bbox_int[0], bbox_int[1]), 
-                         (bbox_int[2], bbox_int[3]), color, 2)
+            # 修改：检查是否有原始旋转框信息
+            if hasattr(track, 'is_rotated') and track.is_rotated and hasattr(track, 'original_bbox'):
+                text_pos = draw_rotated_bbox(vis_frame, track.original_bbox, color)
+            else:
+                # 使用水平框
+                bbox = track.bbox if hasattr(track, 'bbox') else track.tlbr
+                text_pos = draw_rotated_bbox(vis_frame, bbox, color)
             
-            # 显示ID
+            # 显示轨迹信息
             track_id = track.formatted_id if hasattr(track, 'formatted_id') else f"{track.class_name}_{track.track_id}"
             cv2.putText(vis_frame, track_id, 
-                       (bbox_int[0], bbox_int[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 
+                       (text_pos[0], text_pos[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 
                        0.7, color, 2)
             
-            # 显示置信度
             confidence = track.confidence if hasattr(track, 'confidence') else 0.0
             conf_text = f'{confidence:.2f}'
             cv2.putText(vis_frame, conf_text, 
-                       (bbox_int[0], bbox_int[1] + 25), cv2.FONT_HERSHEY_SIMPLEX, 
+                       (text_pos[0], text_pos[1] + 25), cv2.FONT_HERSHEY_SIMPLEX, 
                        0.5, color, 1)
         
         return vis_frame
@@ -290,7 +323,7 @@ if __name__ == '__main__':
         output_dir=output_folder,
         device='cuda:0',
         target_classes=['car', 'truck', 'bus'],
-        score_thr=0.5,
+        score_thr=0.25,
         save_video=True,
         save_data=True
     )

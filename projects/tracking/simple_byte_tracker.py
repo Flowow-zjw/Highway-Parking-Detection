@@ -87,12 +87,16 @@ def tlbr_to_tlwh(tlbr):
     return [tlbr[0], tlbr[1], tlbr[2] - tlbr[0], tlbr[3] - tlbr[1]]
 
 class Detection:
-    """检测结果类"""
+    """检测结果类 - 保存原始旋转框信息"""
     def __init__(self, bbox, confidence, class_name):
+        self.original_bbox = np.array(bbox, dtype=np.float32)  # 新增：保存原始旋转框
         self.bbox = np.array(bbox, dtype=np.float32)
         self.confidence = confidence
         self.class_name = class_name
-        self.xyxy = rotated_bbox_to_xyxy(self.bbox)
+        self.xyxy = rotated_bbox_to_xyxy(self.bbox)  # 转换为水平框供跟踪器使用
+        
+        # 新增：判断是否为旋转框
+        self.is_rotated = len(bbox) >= 5
     
     @property
     def tlwh(self):
@@ -518,7 +522,7 @@ class ByteTrackerWrapper:
         print("SimpleBYTETracker初始化完成")
     
     def update(self, detections, frame_id, timestamp, image=None):
-        """更新跟踪器"""
+        """更新跟踪器 - 保持原始检测信息"""
         # 转换检测格式
         if isinstance(detections, list) and len(detections) > 0:
             det_array = []
@@ -542,9 +546,13 @@ class ByteTrackerWrapper:
         for i, target in enumerate(online_targets):
             track_id = target.track_id
             
-            # 分配类别 - 改进的类别匹配逻辑
-            if det_classes:
-                # 根据位置匹配最近的检测类别
+            # 新增：查找最匹配的原始检测
+            matched_detection = self._find_matched_detection(target, detections)
+            
+            # 分配类别逻辑保持不变...
+            if matched_detection:
+                class_name = matched_detection.class_name
+            elif det_classes:
                 target_center = [(target.tlbr[0] + target.tlbr[2])/2, (target.tlbr[1] + target.tlbr[3])/2]
                 min_dist = float('inf')
                 best_class = det_classes[0]
@@ -570,19 +578,54 @@ class ByteTrackerWrapper:
                     'points': []
                 }
             
-            # 保存轨迹点
+            # 修改：保存轨迹点（使用原始旋转框如果有的话）
+            if matched_detection and matched_detection.is_rotated:
+                bbox_for_save = matched_detection.original_bbox.tolist()
+            else:
+                bbox_for_save = target.tlbr.tolist()
+                
             track_point = {
                 "frame_id": frame_id,
-                "bbox": target.tlbr.tolist(),
-                "timestamp": timestamp
+                "bbox": bbox_for_save,
+                "timestamp": timestamp,
+                "is_rotated": matched_detection.is_rotated if matched_detection else False  # 新增
             }
             self.all_tracks[track_id]['points'].append(track_point)
             
-            # 创建轨迹对象
-            track_obj = TrackObject(target, self.all_tracks[track_id])
+            # 修改：创建轨迹对象，传入原始检测信息
+            track_obj = TrackObject(target, self.all_tracks[track_id], matched_detection)
             tracks.append(track_obj)
         
         return tracks
+    
+    def _find_matched_detection(self, target, detections):
+        """新增：找到与轨迹最匹配的原始检测"""
+        if not detections:
+            return None
+        
+        target_center = [(target.tlbr[0] + target.tlbr[2])/2, (target.tlbr[1] + target.tlbr[3])/2]
+        min_dist = float('inf')
+        best_detection = None
+        
+        for det in detections:
+            det_center = [(det.xyxy[0] + det.xyxy[2])/2, (det.xyxy[1] + det.xyxy[3])/2]
+            dist = ((target_center[0] - det_center[0])**2 + (target_center[1] - det_center[1])**2)**0.5
+            
+            # 检查IoU
+            iou = bbox_iou(target.tlbr, det.xyxy)
+            
+            # 综合距离和IoU
+            combined_score = dist - iou * 100
+            
+            if combined_score < min_dist:
+                min_dist = combined_score
+                best_detection = det
+        
+        # 只有当匹配度合理时才返回
+        if best_detection and min_dist < 50:
+            return best_detection
+        
+        return None
     
     def _get_next_class_id(self, class_name):
         if class_name not in self.class_counters:
@@ -659,8 +702,8 @@ class ByteTrackerWrapper:
         return stats
 
 class TrackObject:
-    """轨迹对象"""
-    def __init__(self, strack, track_info):
+    """轨迹对象 - 保存原始检测信息"""
+    def __init__(self, strack, track_info, original_detection=None):  # 新增参数
         self.track_id = strack.track_id
         self.bbox = strack.tlbr
         self.confidence = strack.score
@@ -669,6 +712,15 @@ class TrackObject:
         self.formatted_id = track_info['formatted_id']
         self.track_points = track_info['points']
         self.confirmed = True
+        
+        # 新增：保存原始检测信息（包括旋转框）
+        self.original_detection = original_detection
+        if original_detection and hasattr(original_detection, 'original_bbox'):
+            self.original_bbox = original_detection.original_bbox
+            self.is_rotated = original_detection.is_rotated
+        else:
+            self.original_bbox = self.bbox
+            self.is_rotated = False
     
     @property
     def is_confirmed(self):
