@@ -80,6 +80,9 @@ HIGHWAY-PAYKING-DETECTION/
 │ │ ├── train.py # 训练脚本
 │ │ └── inference.py # 推理脚本
 │ │
+│ ├── lane_detection/ # 车道划分
+│ │ └── lane_detection.py # 基于传统视觉的车道划分
+│ │
 │ ├── utils/ # 公共工具函数
 │ │ ├── speed_estimator.py # 速度估计函数
 │ │ ├── geo_utils.py # 经纬度与像素映射转换
